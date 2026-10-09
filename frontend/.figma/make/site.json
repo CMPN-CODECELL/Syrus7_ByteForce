@@ -1,0 +1,14 @@
+{
+  "title": "CAMPUSLY",
+  "description": "Connect with peers in a vibrant student community, explore opportunities, share resources, and engage in discussions through a modern Q&A forum.",
+  "icons": {
+    "icon": "/campusly-logo.png"
+  },
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

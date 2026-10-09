@@ -1,0 +1,43 @@
+import { MongoClient, ObjectId, GridFSBucket } from 'mongodb';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/campusly';
+let client;
+let db;
+let bucket;
+
+export async function connectDB() {
+  if (db) return { db, bucket };
+  try {
+    client = new MongoClient(MONGODB_URI);
+    await client.connect();
+    db = client.db('campusly');
+    bucket = new GridFSBucket(db, { bucketName: 'uploads' });
+    console.log('Connected to MongoDB database:', db.databaseName);
+    
+    // Create indexes for efficient querying
+    await db.collection('messages').createIndex({ timestamp: 1 });
+    await db.collection('messages').createIndex({ senderEmail: 1, recipientEmail: 1 });
+    await db.collection('posts').createIndex({ createdAt: -1 });
+    await db.collection('users').createIndex({ email: 1 }, { unique: true });
+    
+    return { db, bucket };
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    throw error;
+  }
+}
+
+export function getDB() {
+  if (!db) throw new Error('Database not connected. Call connectDB first.');
+  return db;
+}
+
+export function getBucket() {
+  if (!bucket) throw new Error('GridFS Bucket not initialized. Call connectDB first.');
+  return bucket;
+}
+
+export { ObjectId };

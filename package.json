@@ -1,0 +1,16 @@
+{
+  "name": "campusly-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "node scripts/run-dev.js",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:server": "cross-env BACKEND_PORT=5500 npm --prefix server run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "start:server": "cross-env BACKEND_PORT=5500 npm --prefix server run start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "cross-env": "^10.0.0"
+  }
+}
