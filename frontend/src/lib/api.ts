@@ -5,12 +5,30 @@ export interface FileAttachment {
   fileId?: string;
 }
 
+export interface UserProfile {
+  id?: string;
+  email: string;
+  name: string;
+  college: string;
+  avatar?: string;
+  username?: string;
+  year?: string;
+  branch?: string;
+  standing?: string;
+  bio?: string;
+  skills?: string[];
+  interests?: string[];
+  points?: number;
+  brownies?: number;
+}
+
 export interface Post {
   _id?: string;
   author: string;
   authorEmail?: string;
   avatar: string;
-  time: string;
+  time?: string;
+  createdAt?: string;
   title: string;
   body: string;
   tags: string[];
@@ -45,8 +63,8 @@ export interface Post {
 export interface Community {
   _id?: string;
   name: string;
-  description: string;
-  category: string;
+  description?: string;
+  category?: string;
   creator: string;
   creatorEmail: string;
   image?: string;
@@ -63,7 +81,9 @@ export interface Product {
   category?: string;
   sellerName?: string;
   sellerEmail?: string;
-  image: string;
+  image?: string;
+  createdAt?: string;
+  savedBy?: string[];
 }
 
 export interface Opportunity {
@@ -79,6 +99,7 @@ export interface Opportunity {
   postedBy?: string;
   appliedBy?: string[];
   savedBy?: string[];
+  createdAt?: string;
 }
 
 export interface ChatMessage {
@@ -279,16 +300,16 @@ export async function fetchCommunities(): Promise<Community[]> {
   }
 }
 
-export async function createCommunity(community: { name: string; description?: string; category?: string; creator: string; creatorEmail: string }): Promise<Community> {
+export async function createCommunity(community: { name: string; description?: string; category?: string; creator: string; creatorEmail: string; image?: string; members?: string[]; memberCount?: number }): Promise<Community> {
   try {
     const res = await fetch('/api/communities', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(community),
     });
-    return await safeParseJson<Community>(res, { ...community, members: [community.creatorEmail], memberCount: 1 });
+    return await safeParseJson<Community>(res, { ...community, members: community.members ?? [community.creatorEmail], memberCount: community.memberCount ?? 1 });
   } catch {
-    return { ...community, members: [community.creatorEmail], memberCount: 1 };
+    return { ...community, members: community.members ?? [community.creatorEmail], memberCount: community.memberCount ?? 1 };
   }
 }
 
@@ -414,16 +435,16 @@ export async function createProduct(product: Partial<Product>): Promise<Product>
   } as Product;
 }
 
-export async function toggleSaveProduct(id: string, userEmail: string) {
+export async function toggleSaveProduct(id: string, userEmail: string): Promise<{ isSaved: boolean }> {
   try {
     const res = await fetch(`/api/marketplace/${id}/toggle-save`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userEmail }),
     });
-    return await safeParseJson(res, { saved: false });
+    return await safeParseJson<{ isSaved: boolean }>(res, { isSaved: false });
   } catch {
-    return { saved: false };
+    return { isSaved: false };
   }
 }
 
@@ -475,16 +496,16 @@ export async function applyOpportunity(id: string, userEmail: string) {
   }
 }
 
-export async function toggleSaveOpportunity(id: string, userEmail: string) {
+export async function toggleSaveOpportunity(id: string, userEmail: string): Promise<{ isSaved: boolean }> {
   try {
     const res = await fetch(`/api/opportunities/${id}/toggle-save`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userEmail }),
     });
-    return await safeParseJson(res, { saved: false });
+    return await safeParseJson<{ isSaved: boolean }>(res, { isSaved: false });
   } catch {
-    return { saved: false };
+    return { isSaved: false };
   }
 }
 

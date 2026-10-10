@@ -125,6 +125,12 @@ interface UserProfile {
   username?: string;
   year?: string;
   branch?: string;
+  standing?: string;
+  bio?: string;
+  skills?: string[];
+  interests?: string[];
+  points?: number;
+  brownies?: number;
 }
 
 function calculateUserBrownies(
@@ -263,8 +269,7 @@ type IconName =
   | "bell" | "plus" | "sun" | "moon" | "arrowUp" | "arrowDown" | "message"
   | "bookmark" | "flag" | "check" | "chevron" | "book" | "clock" | "close"
   | "send" | "more" | "pin" | "shield" | "calendar" | "filter" | "edit"
-  | "eye" | "eyeOff" | "trash" | "smile";
-
+  | "eye" | "eyeOff" | "trash" | "smile" | "pencil";
 function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
     home: <><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>,
@@ -299,6 +304,7 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     eyeOff: <><path d="m3 3 18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.5 5.8A10.7 10.7 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16.4 16.4 0 0 1-2.1 3.1M6.2 6.2C3.7 8 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1 0 2-.2 2.8-.5"/></>,
     trash: <><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>,
     smile: <><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></>,
+    pencil: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></>,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -312,11 +318,11 @@ function GoogleIcon() {
   </svg>;
 }
 
-function Button({ children, variant = "primary", icon, onClick, type = "button", className = "", disabled = false, loading = false }: {
+function Button({ children, variant = "primary", icon, onClick, type = "button", className = "", disabled = false, loading = false, style }: {
   children?: React.ReactNode; variant?: "primary" | "secondary" | "ghost" | "icon";
-  icon?: IconName; onClick?: () => void; type?: "button" | "submit"; className?: string; disabled?: boolean; loading?: boolean;
+  icon?: IconName; onClick?: React.MouseEventHandler<HTMLButtonElement>; type?: "button" | "submit"; className?: string; disabled?: boolean; loading?: boolean; style?: React.CSSProperties;
 }) {
-  return <button type={type} className={`btn btn-${variant} ${className}`} onClick={onClick} disabled={disabled || loading}>{loading ? <span className="button-spinner"/> : icon && <Icon name={icon} size={18}/>} {loading ? "Working…" : children}</button>;
+  return <button type={type} className={`btn btn-${variant} ${className}`} onClick={onClick} disabled={disabled || loading} style={style}>{loading ? <span className="button-spinner"/> : icon && <Icon name={icon} size={18}/>} {loading ? "Working…" : children}</button>;
 }
 
 const nav: { name: Page; icon: IconName }[] = [
@@ -667,7 +673,7 @@ function PostCard({
     }
   };
 
-  const handleReplyAdded = (newReply: { text: string; author: string; avatar: string; color: string }) => {
+  const handleReplyAdded = (newReply: { text: string; author: string; avatar: string; color: string; createdAt?: string }) => {
     setReplies(cur => [...cur, newReply]);
     post.comments = (post.comments || 0) + 1;
   };
@@ -1014,6 +1020,7 @@ function Discussion({
     votes?: number;
     upvoters?: string[];
     downvoters?: string[];
+    createdAt?: string;
   }) => void;
   onReplyDeleted?: (replyText: string) => void;
   currentUser: UserProfile | null;
@@ -2619,7 +2626,7 @@ function Chats({ currentUser, onFeedback, initialPeer, onOpenUserProfile }: { cu
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <span
                 className="avatar avatar-blue clickable-user"
-                onClick={() => onOpenUserProfile?.({ email: activePeer, name: activePeerName })}
+                onClick={() => onOpenUserProfile?.({ email: activePeer ?? undefined, name: activePeerName || "Student" })}
                 style={{ cursor: "pointer" }}
                 title={`View ${activePeerName}'s profile`}
               >
@@ -2628,7 +2635,7 @@ function Chats({ currentUser, onFeedback, initialPeer, onOpenUserProfile }: { cu
               <div>
                 <strong
                   className="clickable-user"
-                  onClick={() => onOpenUserProfile?.({ email: activePeer, name: activePeerName })}
+                  onClick={() => onOpenUserProfile?.({ email: activePeer ?? undefined, name: activePeerName || "Student" })}
                   style={{ cursor: "pointer" }}
                   title={`View ${activePeerName}'s profile`}
                 >
@@ -3243,11 +3250,11 @@ function Opportunities({
                 <div style={{ marginTop: "4px", marginBottom: "4px" }}>
                   <span
                     className="clickable-user"
-                    onClick={() => onOpenUserProfile?.({ email: o.postedBy, name: o.postedBy.split("@")[0] })}
+                    onClick={() => onOpenUserProfile?.({ email: o.postedBy ?? undefined, name: (o.postedBy ?? "").split("@")[0] || "Student" })}
                     style={{ fontSize: "11px", color: "var(--muted)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
                     title={`View ${o.postedBy}'s profile`}
                   >
-                    <Icon name="user" size={12}/> By {o.postedBy.split("@")[0]}
+                    <Icon name="user" size={12}/> By {(o.postedBy ?? "").split("@")[0] || "Student"}
                   </span>
                 </div>
               )}

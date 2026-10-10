@@ -1,47 +1,56 @@
 import { MongoClient, ObjectId, GridFSBucket } from 'mongodb';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
 
-dotenv.config();
+dotenv.config({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/campusly';
+const LOCAL_MONGODB_URI = 'mongodb://127.0.0.1:27017/campusly';
+const MONGODB_URI = process.env.MONGODB_URI?.trim() || LOCAL_MONGODB_URI;
+const CONNECTION_OPTIONS = { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 };
 let client;
 let db;
 let bucket;
 
-export async function connectDB() {
-  if (db) return { db, bucket };
+async function connectToMongoDB(uri) {
+  const nextClient = new MongoClient(uri, CONNECTION_OPTIONS);
   try {
-    client = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 4000 });
-    await client.connect();
-    db = client.db('campusly');
-    bucket = new GridFSBucket(db, { bucketName: 'uploads' });
-    console.log('Connected to MongoDB database:', db.databaseName);
-    
+    await nextClient.connect();
+    const nextDb = nextClient.db();
+
     // Create indexes for efficient querying
-    await db.collection('messages').createIndex({ timestamp: 1 }).catch(() => {});
-    await db.collection('messages').createIndex({ senderEmail: 1, recipientEmail: 1 }).catch(() => {});
-    await db.collection('posts').createIndex({ createdAt: -1 }).catch(() => {});
-    await db.collection('users').createIndex({ email: 1 }, { unique: true }).catch(() => {});
-    
+    await nextDb.collection('messages').createIndex({ timestamp: 1 }).catch(() => {});
+    await nextDb.collection('messages').createIndex({ senderEmail: 1, recipientEmail: 1 }).catch(() => {});
+    await nextDb.collection('posts').createIndex({ createdAt: -1 }).catch(() => {});
+    await nextDb.collection('users').createIndex({ email: 1 }, { unique: true }).catch(() => {});
+
+    client = nextClient;
+    db = nextDb;
+    bucket = new GridFSBucket(nextDb, { bucketName: 'uploads' });
+    console.log('Connected to MongoDB database:', nextDb.databaseName);
     return { db, bucket };
   } catch (error) {
-    console.warn('Primary MongoDB connection failed, attempting local MongoDB (mongodb://127.0.0.1:27017/campusly)...');
+    await nextClient.close().catch(() => {});
+    throw error;
+  }
+}
+
+export async function connectDB() {
+  if (db) return { db, bucket };
+
+  try {
+    return await connectToMongoDB(MONGODB_URI);
+  } catch (error) {
+    if (MONGODB_URI === LOCAL_MONGODB_URI) throw error;
+
+    console.warn('Configured MongoDB connection failed; attempting local MongoDB fallback.');
     try {
-      client = new MongoClient('mongodb://127.0.0.1:27017/campusly');
-      await client.connect();
-      db = client.db('campusly');
-      bucket = new GridFSBucket(db, { bucketName: 'uploads' });
-      console.log('Connected to local MongoDB database:', db.databaseName);
-
-      await db.collection('messages').createIndex({ timestamp: 1 }).catch(() => {});
-      await db.collection('messages').createIndex({ senderEmail: 1, recipientEmail: 1 }).catch(() => {});
-      await db.collection('posts').createIndex({ createdAt: -1 }).catch(() => {});
-      await db.collection('users').createIndex({ email: 1 }, { unique: true }).catch(() => {});
-
-      return { db, bucket };
+      return await connectToMongoDB(LOCAL_MONGODB_URI);
     } catch (localErr) {
-      console.error('Local MongoDB connection also failed:', localErr);
-      throw error;
+      const message = localErr instanceof Error
+        ? localErr.message.replace(/mongodb(?:\+srv)?:\/\/[^\s"'<>]+/gi, '[MongoDB URI]')
+        : String(localErr);
+      console.error('Local MongoDB connection also failed:', message);
+      throw new AggregateError([error, localErr], 'Unable to connect to configured or local MongoDB.');
     }
   }
 }

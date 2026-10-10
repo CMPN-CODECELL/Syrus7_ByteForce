@@ -31,9 +31,6 @@ router.get('/overview', async (req, res) => {
 
     res.json({
       database: db.databaseName,
-      connectionUri: 'mongodb://127.0.0.1:27017/campusly',
-      host: '127.0.0.1',
-      port: 27017,
       status: 'Connected & Active',
       collections: stats,
     });
@@ -289,8 +286,7 @@ router.get('/view', async (req, res) => {
     </div>
     <div class="uri-badge">
       <span class="status-dot"></span>
-      <span id="uriText">mongodb://127.0.0.1:27017/campusly</span>
-      <button class="copy-btn" onclick="copyUri()">Copy Compass URI</button>
+      <span>Connected to ${db.databaseName}</span>
     </div>
   </header>
 
@@ -322,11 +318,6 @@ router.get('/view', async (req, res) => {
 
   <script>
     let activeCollection = '${collectionsWithCounts[0]?.name || 'posts'}';
-
-    function copyUri() {
-      navigator.clipboard.writeText('mongodb://127.0.0.1:27017/campusly');
-      alert('MongoDB URI copied! Paste into MongoDB Compass to connect directly.');
-    }
 
     async function selectCollection(name, btn) {
       activeCollection = name;
