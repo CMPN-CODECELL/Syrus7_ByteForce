@@ -127,3 +127,48 @@ export function broadcastConversationDeleted(user1, user2) {
     }
   }
 }
+
+export function broadcastPostCreated(post) {
+  const data = JSON.stringify({ type: 'post_created', post });
+  for (const set of userSockets.values()) {
+    for (const sock of set) {
+      if (sock.readyState === WebSocket.OPEN) {
+        sock.send(data);
+      }
+    }
+  }
+}
+
+export function broadcastMessageEdited(message) {
+  const { senderEmail, recipientEmail } = message;
+  const data = JSON.stringify({ type: 'message_edited', message });
+
+  if (recipientEmail && userSockets.has(recipientEmail)) {
+    for (const sock of userSockets.get(recipientEmail)) {
+      if (sock.readyState === WebSocket.OPEN) {
+        sock.send(data);
+      }
+    }
+  }
+
+  if (senderEmail && userSockets.has(senderEmail)) {
+    for (const sock of userSockets.get(senderEmail)) {
+      if (sock.readyState === WebSocket.OPEN) {
+        sock.send(data);
+      }
+    }
+  }
+}
+
+export function broadcastCommunityMessageEdited(communityId, message) {
+  const data = JSON.stringify({ type: 'community_message_edited', communityId, message });
+  for (const set of userSockets.values()) {
+    for (const sock of set) {
+      if (sock.readyState === WebSocket.OPEN) {
+        sock.send(data);
+      }
+    }
+  }
+}
+
+

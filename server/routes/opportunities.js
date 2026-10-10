@@ -3,6 +3,22 @@ import { getDB, ObjectId } from '../db.js';
 
 const router = express.Router();
 
+const MODERATOR_EMAILS = ['jainilmutha2008@gmail.com', 'ayushbsingh15@gmail.com'];
+
+const BANNED_WORDS = [
+  'porn', 'sex', 'ass', 'bad ass', 'mother fucker', 'motherfucker', 'nude',
+  'dick', 'pussy', 'bitch', 'cock', 'boobs', 'cunt', 'whore', 'slut', 'fuck'
+];
+
+function isContentInappropriate(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return BANNED_WORDS.some(w => {
+    const regex = new RegExp(`\\b${w.replace(/\s+/g, '\\s+')}\\b`, 'i');
+    return regex.test(lower);
+  });
+}
+
 // Get opportunities
 router.get('/', async (req, res) => {
   try {
@@ -28,11 +44,22 @@ router.post('/', async (req, res) => {
       deadline = 'Open',
       eligibility = 'All students',
       logo = 'C',
+      link = '',
+      image = '',
+      postedBy = '',
     } = req.body;
 
     if (!title || !company) {
       return res.status(400).json({ error: 'Title and company are required' });
     }
+
+    if (isContentInappropriate(title) || isContentInappropriate(company)) {
+      return res.status(400).json({
+        error: 'Opportunity violates campus safety policy. Inappropriate or prohibited words are not allowed.'
+      });
+    }
+
+    const formattedLink = link ? (link.startsWith('http://') || link.startsWith('https://') ? link.trim() : `https://${link.trim()}`) : '';
 
     const db = getDB();
     const doc = {
@@ -42,6 +69,9 @@ router.post('/', async (req, res) => {
       deadline,
       eligibility,
       logo,
+      link: formattedLink,
+      image: image || '',
+      postedBy: postedBy || '',
       savedBy: [],
       appliedBy: [],
       createdAt: new Date(),
@@ -103,6 +133,30 @@ router.post('/:id/toggle-save', async (req, res) => {
   } catch (error) {
     console.error('Save error:', error);
     res.status(500).json({ error: 'Failed to toggle save' });
+  }
+});
+
+// Delete opportunity (creator or moderator)
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userEmail } = req.body;
+    if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid ID' });
+
+    const db = getDB();
+    const opp = await db.collection('opportunities').findOne({ _id: new ObjectId(id) });
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    const isMod = MODERATOR_EMAILS.includes(userEmail?.toLowerCase());
+    if (!isMod && userEmail && opp.postedBy && opp.postedBy !== userEmail) {
+      return res.status(403).json({ error: 'Unauthorized to delete this opportunity' });
+    }
+
+    await db.collection('opportunities').deleteOne({ _id: new ObjectId(id) });
+    res.json({ success: true, id });
+  } catch (error) {
+    console.error('Delete opportunity error:', error);
+    res.status(500).json({ error: 'Failed to delete opportunity' });
   }
 });
 

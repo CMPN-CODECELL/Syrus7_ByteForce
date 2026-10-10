@@ -71,37 +71,78 @@ function getGeminiApiKey(req) {
   ).trim();
 }
 
+function extractJson(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {}
+
+  // Match ```json ... ``` or ``` ... ```
+  const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch) {
+    try {
+      return JSON.parse(codeBlockMatch[1].trim());
+    } catch {}
+  }
+
+  // Find outer { ... } or [ ... ]
+  const objectMatch = trimmed.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+  if (objectMatch) {
+    try {
+      return JSON.parse(objectMatch[1].trim());
+    } catch {}
+  }
+
+  return null;
+}
+
 async function callGroqSafeguard(userInput, groqKey) {
   if (!groqKey) return null;
-  try {
-    const groq = new Groq({ apiKey: groqKey });
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: "system",
-          content: PROMPT_INJECTION_POLICY.replace('{{USER_INPUT}}', userInput),
-        },
-        {
-          role: "user",
-          content: userInput,
-        }
-      ],
-      model: "openai/gpt-oss-safeguard-20b",
-    });
+  const models = ['openai/gpt-oss-safeguard-20b', 'llama-guard-3-8b', 'llama-3.1-8b-instant'];
 
-    const raw = chatCompletion.choices[0]?.message?.content || "";
-    const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-    return JSON.parse(cleaned);
-  } catch (err) {
-    console.warn("Groq Safeguard call error:", err.message);
-    return null;
+  for (const model of models) {
+    try {
+      const groq = new Groq({ apiKey: groqKey });
+      const chatCompletion = await groq.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content: PROMPT_INJECTION_POLICY.replace('{{USER_INPUT}}', userInput),
+          },
+          {
+            role: "user",
+            content: userInput,
+          }
+        ],
+        model,
+        temperature: 0.1,
+      });
+
+      const raw = chatCompletion.choices[0]?.message?.content || "";
+      const parsed = extractJson(raw);
+      if (parsed) return parsed;
+
+      // Check if guard model returned raw unsafe label
+      if (typeof raw === 'string' && /unsafe/i.test(raw)) {
+        return {
+          violation: 1,
+          category: "Safety Guard Violation",
+          rationale: "Content was flagged as unsafe by AI guardrails."
+        };
+      }
+    } catch (err) {
+      console.warn(`Groq Safeguard call error with ${model}:`, err.message);
+    }
   }
+
+  return null;
 }
 
 async function callGemini(prompt, apiKey) {
   if (!apiKey) return null;
 
-  const models = ['gemini-1.5-flash', 'gemini-2.0-flash'];
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b'];
 
   for (const model of models) {
     try {
@@ -113,6 +154,7 @@ async function callGemini(prompt, apiKey) {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.2,
+            responseMimeType: 'application/json',
           },
         }),
       });
@@ -127,14 +169,8 @@ async function callGemini(prompt, apiKey) {
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) continue;
 
-      // Clean JSON text if wrapped in ```json ... ```
-      const cleaned = rawText
-        .replace(/^```json\s*/i, '')
-        .replace(/^```\s*/i, '')
-        .replace(/\s*```$/i, '')
-        .trim();
-
-      return JSON.parse(cleaned);
+      const parsed = extractJson(rawText);
+      if (parsed) return parsed;
     } catch (err) {
       console.warn(`Failed calling Gemini model ${model}:`, err.message);
     }
@@ -143,14 +179,106 @@ async function callGemini(prompt, apiKey) {
   return null;
 }
 
-// 1. AI Content Moderation Endpoint (Groq Safeguard + Gemini Safety)
+function normalizeForModeration(text) {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/@/g, 'a')
+    .replace(/\$/g, 's')
+    .replace(/0/g, 'o')
+    .replace(/[1!|]/g, 'i')
+    .replace(/3/g, 'e')
+    .replace(/5/g, 's')
+    .replace(/\+/g, 't');
+}
+
+// 1. AI Content Moderation Endpoint (Groq Safeguard + Gemini Safety + Local Rules)
 router.post('/moderate', async (req, res) => {
   try {
-    const { text, title, type = 'post' } = req.body;
+    const { text = '', title = '', type = 'post' } = req.body;
     const content = `${title ? `Title: ${title}\n` : ''}${text || ''}`.trim();
 
     if (!content) {
       return res.json({ flagged: false, categories: [], reason: 'Empty content', severity: 'none' });
+    }
+
+    // Step 0: Immediate High-Precision Local Moderation Engine
+    const norm = normalizeForModeration(content);
+    const normNoPunct = norm.replace(/[*_~`\-\.]/g, '');
+    const normPunctAsSpace = norm.replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ');
+
+    const misconductPatterns = [
+      /\b(leak|leaked|leaking)\b.*\b(exam|quiz|test|paper|midterm|endsem|question|answer)/i,
+      /\b(exam|quiz|test|midterm|endsem|paper)\b.*\b(leak|leaked|leaks|cheats?|answers?)\b/i,
+      /\b(buy|sell|selling|purchase)\b.*\b(exam|paper|assignment|homework|essay|degree|diploma|solutions?)\b/i,
+      /\b(cheat|cheating)\b.*\b(exam|test|quiz|proctor|online exam)\b/i,
+      /\b(hack|tamper|change)\b.*\b(grade|portal|cgpa|gpa|marks)\b/i,
+      /\b(do my exam|take my exam|write my paper|do my homework for money)\b/i,
+    ];
+
+    const toxicityPatterns = [
+      // Adult, sexual, and NSFW terms (porn, sex, ass, bad ass, etc.)
+      /\b(bad\s*ass|badass)\b/i,
+      /\b(ass|asses|asshole|assholes|jackass|dumbass|fatass)\b/i,
+      /\b(porn|porno|pornography|xxx|hentai|nsfw)\b/i,
+      /\b(sex|sexy|sexual|sexuality|intercourse|erotic)\b/i,
+      /\b(nude|nudes|naked|boob|boobs|tit|tits|titties|blowjob|handjob|cum|cumshot|dildo|vagina|penis|cock|cocks|pussy|pussies|masturbat\w*|horny|orgasm|clit|clitoris)\b/i,
+      // Motherfucker variations (with space, hyphens, compound or leetspeak)
+      /\b(mother\s*fuck(er|ing|ers|s|a|ed)?|mothafuck(a|er|in|ing)?|mofo)\b/i,
+      // Standalone fuck and variations
+      /\b(fuck|fucker|fuckers|fucking|fucked|fucks|fck|fuk|fuuck|fuuuck|f\*+k)\b/i,
+      // Severe insults, profanities & slurs
+      /\b(bitch|bitches|bitching|bitchy|bastard|bastards)\b/i,
+      /\b(shit|shitty|bullshit|dipshit|cunt|cunts|dick|dickhead|dicks|whore|whores|slut|sluts|retard|retarded)\b/i,
+      /\b(nigger|nigga|faggot|fag|tranny|chink|kike)\b/i,
+      // Campus/regional abusive slurs
+      /\b(behenchod|bhenchod|madarchod|chutiya|chutiye|gandu|bhosdike|bhosdi|lauda|lodu|harami|saala)\b/i,
+      // Threats, harassment and self-harm
+      /\b(stfu|kys|die\s+bitch|go\s+die|kill\s+yourself)\b/i,
+      /\b(kill\s+(you|him|her|them|everyone|myself)|commit\s+suicide|die\s+in\s+a\s+fire|shoot\s+up|bomb\s+the|slit\s+your)\b/i,
+      /\b(i\s+will\s+(kill|murder|hurt|destroy|beat\s+up|attack))\b/i,
+      /\b(i\s+hate\s+(all\s+)?(women|men|gay|trans|blacks|whites|muslims|jews|hindus|asians))\b/i,
+      /\b(you\s+are\s+(a\s+)?(piece of shit|worthless|ugly|disgusting|pathetic|waste of space))\b/i,
+    ];
+
+    const spamPatterns = [
+      /\b(crypto\s+giveaway|free\s+crypto|telegram\s+channel|whatsapp\s+betting|free\s+cash\s+click|earn\s+\$?\d+\s+daily|betting\s+app|casino\s+bonus)\b/i,
+      /\b(buy\s+(drugs|weed|cannabis|cocaine|pills|fake\s+id))\b/i,
+    ];
+
+    const injectionPatterns = [
+      /\b(ignore\s+(all\s+)?(previous\s+)?(instructions|prompts|rules)|reveal\s+system\s+prompt|disregard\s+prior\s+guidelines|system\s+override)\b/i,
+      /\b(you\s+are\s+now\s+in\s+developer\s+mode|dan\s+mode|jailbreak)\b/i,
+    ];
+
+    const testVariants = [content, norm, normNoPunct, normPunctAsSpace];
+
+    const isMisconduct = misconductPatterns.some(p => testVariants.some(v => p.test(v)));
+    const isToxicity = toxicityPatterns.some(p => testVariants.some(v => p.test(v)));
+    const isSpam = spamPatterns.some(p => testVariants.some(v => p.test(v)));
+    const isInjection = injectionPatterns.some(p => testVariants.some(v => p.test(v)));
+
+    if (isMisconduct || isToxicity || isSpam || isInjection) {
+      const categories = [];
+      if (isMisconduct) categories.push('academic_misconduct');
+      if (isToxicity) categories.push('toxicity');
+      if (isSpam) categories.push('spam');
+      if (isInjection) categories.push('prompt_injection');
+
+      return res.json({
+        flagged: true,
+        categories,
+        reason: isMisconduct
+          ? 'Content appears to promote academic dishonesty or exam paper sharing.'
+          : isToxicity
+          ? 'Content flagged for severe profanity, abusive language, or harassment.'
+          : isInjection
+          ? 'Content flagged for prompt injection or system instruction override attempt.'
+          : 'Content flagged as promotional spam or prohibited goods.',
+        severity: isMisconduct || isToxicity || isInjection ? 'high' : 'medium',
+        poweredBy: 'Campus Safety Engine',
+      });
     }
 
     // Step A: Groq Prompt Injection Safeguard Check
@@ -163,7 +291,7 @@ router.post('/moderate', async (req, res) => {
           categories: [groqResult.category || "Prompt Injection"],
           reason: groqResult.rationale || "Content attempts system instruction bypass or prompt manipulation.",
           severity: "high",
-          poweredBy: "Groq Safeguard (openai/gpt-oss-safeguard-20b)",
+          poweredBy: "Groq Safeguard",
         });
       }
     }
@@ -183,7 +311,7 @@ ${content}
 Return strictly valid JSON with this exact schema:
 {
   "flagged": true or false,
-  "categories": ["toxicity" | "harassment" | "hate_speech" | "academic_misconduct" | "spam" | "inappropriate"],
+  "categories": ["toxicity" | "harassment" | "hate_speech" | "academic_misconduct" | "spam" | "inappropriate" | "prompt_injection"],
   "reason": "Brief 1-sentence explanation of why it was or was not flagged",
   "severity": "none" | "low" | "medium" | "high"
 }`;
@@ -197,40 +325,12 @@ Return strictly valid JSON with this exact schema:
       }
     }
 
-    // Heuristic Fallback Moderation if Gemini key is missing or offline
-    const misconductPatterns = [/leak.*exam/i, /exam.*leak/i, /buy.*paper/i, /cheat.*exam/i, /hack.*grade/i, /fake.*diploma/i];
-    const toxicityPatterns = [/\b(kill|suicide|threaten|harass|die|attack)\b/i, /hate/i, /idiot.*die/i, /motherfucker/i, /stupid.*asshole/i, /retard/i, /behenchod/i];
-    const spamPatterns = [/crypto.*giveaway/i, /telegram.*channel/i, /whatsapp.*betting/i, /free.*cash.*click/i];
-
-    const isMisconduct = misconductPatterns.some(p => p.test(content));
-    const isToxicity = toxicityPatterns.some(p => p.test(content));
-    const isSpam = spamPatterns.some(p => p.test(content));
-
-    if (isMisconduct || isToxicity || isSpam) {
-      const categories = [];
-      if (isMisconduct) categories.push('academic_misconduct');
-      if (isToxicity) categories.push('toxicity');
-      if (isSpam) categories.push('spam');
-
-      return res.json({
-        flagged: true,
-        categories,
-        reason: isMisconduct
-          ? 'Content appears to promote academic dishonesty or exam paper sharing.'
-          : isToxicity
-          ? 'Content flagged for potential harassment or hostile language.'
-          : 'Content flagged as promotional spam.',
-        severity: isMisconduct || isToxicity ? 'high' : 'medium',
-        poweredBy: 'Campus Safety Engine',
-      });
-    }
-
     return res.json({
       flagged: false,
       categories: [],
       reason: 'Content complies with university community guidelines.',
       severity: 'none',
-      poweredBy: geminiKey ? 'Google Gemini AI' : 'Local Safety Engine',
+      poweredBy: geminiKey ? 'Google Gemini AI' : 'Campus Safety Engine',
     });
   } catch (err) {
     console.error('Moderation error:', err);
@@ -353,19 +453,48 @@ Return strictly valid JSON with this exact schema:
       }
     }
 
-    // Heuristic Fallback Summarizer
-    const sampleReplies = replies.slice(0, 4);
-    const takeaways = sampleReplies.length > 0
-      ? sampleReplies.map(r => `${r.author}: "${r.text.slice(0, 90)}${r.text.length > 90 ? '...' : ''}"`)
-      : ['No student replies recorded yet.'];
+    // Smart Synthesized Fallback Summarizer
+    const fillerRegex = /^(thanks|thank you|ok|okay|cool|\+1|upvoted|following|nice|bump|same here)\b/i;
+    const meaningfulTips = [];
+
+    replies.forEach(r => {
+      const rawSentences = (r.text || '').split(/(?<=[.!?])\s+/);
+      const nonFiller = rawSentences.filter(s => s.trim().length > 8 && !fillerRegex.test(s.trim()));
+      if (nonFiller.length > 0) {
+        meaningfulTips.push({ author: r.author || 'Peer', tip: nonFiller[0].trim() });
+      } else if (r.text && r.text.trim().length > 4) {
+        meaningfulTips.push({ author: r.author || 'Peer', tip: r.text.trim() });
+      }
+    });
+
+    const takeaways = [];
+    meaningfulTips.slice(0, 3).forEach(item => {
+      takeaways.push(`${item.author}: ${item.tip}`);
+    });
+    while (takeaways.length < 3 && replies.length > 0) {
+      takeaways.push('Community recommendation: Review shared notes and study links across replies.');
+    }
+
+    const leadAdvice = meaningfulTips[0] ? ` emphasizing "${meaningfulTips[0].tip.slice(0, 70)}..."` : '';
+    const summary = replies.length > 0
+      ? `Students discussed "${title}". Across ${replies.length} replies, peers shared practical guidance${leadAdvice}.`
+      : `Discussion regarding "${title}". The author is seeking insights and experiences from campus peers and seniors.`;
+
+    const consensus = meaningfulTips.length > 1
+      ? `Consensus: Most contributors recommend following structured resources and practical methods like ${meaningfulTips[0].author}'s suggestions.`
+      : replies.length > 0
+      ? `Consensus: General community agreement with the advice shared by ${replies[0]?.author || 'contributors'}.`
+      : 'Awaiting initial community contributions and student solutions.';
 
     return res.json({
-      summary: `Discussion on "${title}". ${replies.length} student contribution${replies.length === 1 ? '' : 's'} recorded.`,
-      keyTakeaways: takeaways,
-      consensus: replies.length > 0
-        ? `Students shared ${replies.length} practical tips and answers on this discussion.`
-        : 'Open for peer contributions from college students.',
-      poweredBy: apiKey ? 'Google Gemini AI' : 'Quick Summary Engine',
+      summary,
+      keyTakeaways: takeaways.length > 0 ? takeaways : [
+        `Core inquiry: ${body ? body.slice(0, 110) : 'Guidance requested on ' + title}`,
+        'The thread is currently open for senior tips and peer recommendations.',
+        'Contribute your practical knowledge or notes below to help this student.'
+      ],
+      consensus,
+      poweredBy: apiKey ? 'Google Gemini AI' : 'Campus Summarizer Engine',
     });
   } catch (err) {
     console.error('Thread summary error:', err);

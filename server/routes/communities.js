@@ -1,8 +1,10 @@
 import express from 'express';
 import { getDB, ObjectId } from '../db.js';
-import { broadcastCommunityMessage } from '../ws.js';
+import { broadcastCommunityMessage, broadcastCommunityMessageEdited } from '../ws.js';
 
 const router = express.Router();
+
+const MODERATOR_EMAILS = ['jainilmutha2008@gmail.com', 'ayushbsingh15@gmail.com'];
 
 // Get all communities
 router.get('/', async (req, res) => {
@@ -22,7 +24,7 @@ router.get('/', async (req, res) => {
 // Create community
 router.post('/', async (req, res) => {
   try {
-    const { name, description = '', category = 'General', creator = 'Anonymous', creatorEmail = '' } = req.body;
+    const { name, description = '', category = 'General', creator = 'Anonymous', creatorEmail = '', image = '' } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Community name is required' });
 
     const db = getDB();
@@ -32,6 +34,7 @@ router.post('/', async (req, res) => {
       category,
       creator,
       creatorEmail,
+      image: image || '',
       members: creatorEmail ? [creatorEmail] : ['member'],
       memberCount: 1,
       createdAt: new Date(),
@@ -149,7 +152,8 @@ router.delete('/:id/messages/:messageId', async (req, res) => {
     const msg = await db.collection('community_messages').findOne({ _id: new ObjectId(messageId) });
     if (!msg) return res.status(404).json({ error: 'Message not found' });
 
-    if (userEmail && msg.senderEmail && msg.senderEmail !== userEmail) {
+    const isMod = MODERATOR_EMAILS.includes(userEmail?.toLowerCase());
+    if (!isMod && userEmail && msg.senderEmail && msg.senderEmail !== userEmail) {
       return res.status(403).json({ error: 'Unauthorized to delete this message' });
     }
 
@@ -161,7 +165,108 @@ router.delete('/:id/messages/:messageId', async (req, res) => {
   }
 });
 
-// Clear community chat (by community creator)
+// Edit message in community chat
+router.patch('/:id/messages/:messageId', async (req, res) => {
+  try {
+    const { id, messageId } = req.params;
+    const { userEmail, text } = req.body;
+
+    if (!userEmail) {
+      return res.status(400).json({ error: 'userEmail is required to verify ownership' });
+    }
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Message text cannot be empty' });
+    }
+    if (!ObjectId.isValid(messageId)) return res.status(400).json({ error: 'Invalid message ID' });
+
+    const db = getDB();
+    const query = { _id: new ObjectId(messageId) };
+    const msg = await db.collection('community_messages').findOne(query);
+    if (!msg) return res.status(404).json({ error: 'Message not found' });
+
+    const isMod = MODERATOR_EMAILS.includes(userEmail?.toLowerCase());
+    if (!isMod && msg.senderEmail && msg.senderEmail !== userEmail) {
+      return res.status(403).json({ error: 'Unauthorized to edit this message' });
+    }
+
+    const updatedText = text.trim();
+    const now = new Date();
+    await db.collection('community_messages').updateOne(query, {
+      $set: { text: updatedText, edited: true, editedAt: now }
+    });
+
+    const updatedMsg = { ...msg, text: updatedText, edited: true, editedAt: now };
+    broadcastCommunityMessageEdited(id, updatedMsg);
+
+    res.json(updatedMsg);
+  } catch (error) {
+    console.error('Failed to edit community message:', error);
+    res.status(500).json({ error: 'Failed to edit community message' });
+  }
+});
+
+// Delete whole community (creator or moderator)
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userEmail } = req.body;
+    if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid ID' });
+
+    const db = getDB();
+    const comm = await db.collection('communities').findOne({ _id: new ObjectId(id) });
+    if (!comm) return res.status(404).json({ error: 'Community not found' });
+
+    const isMod = MODERATOR_EMAILS.includes(userEmail?.toLowerCase());
+    if (!isMod && userEmail && comm.creatorEmail && comm.creatorEmail !== userEmail) {
+      return res.status(403).json({ error: 'Unauthorized to delete this community' });
+    }
+
+    await db.collection('communities').deleteOne({ _id: new ObjectId(id) });
+    await db.collection('community_messages').deleteMany({ communityId: id });
+    res.json({ success: true, id });
+  } catch (error) {
+    console.error('Failed to delete community:', error);
+    res.status(500).json({ error: 'Failed to delete community' });
+  }
+});
+
+// Report a community message
+router.post('/:id/messages/:messageId/report', async (req, res) => {
+  try {
+    const { id, messageId } = req.params;
+    const { reason = 'Inappropriate message', reporterEmail = '' } = req.body;
+    if (!ObjectId.isValid(messageId)) return res.status(400).json({ error: 'Invalid message ID' });
+
+    const db = getDB();
+    await db.collection('community_messages').updateOne(
+      { _id: new ObjectId(messageId) },
+      {
+        $set: { reported: true, reportReason: reason, reporterEmail },
+        $push: { reports: { reason, reporterEmail, createdAt: new Date() } }
+      }
+    );
+    res.json({ reported: true, messageId });
+  } catch (error) {
+    console.error('Failed to report community message:', error);
+    res.status(500).json({ error: 'Failed to report message' });
+  }
+});
+
+// Get reported community messages (moderator)
+router.get('/reported-messages', async (req, res) => {
+  try {
+    const db = getDB();
+    const reported = await db.collection('community_messages').find({
+      $or: [{ reported: true }, { 'reports.0': { $exists: true } }]
+    }).sort({ createdAt: -1 }).toArray();
+    res.json(reported);
+  } catch (error) {
+    console.error('Failed to get reported community messages:', error);
+    res.status(500).json({ error: 'Failed to get reported messages' });
+  }
+});
+
+// Clear community chat (by community creator or moderator)
 router.delete('/:id/messages', async (req, res) => {
   try {
     const { id } = req.params;
@@ -170,8 +275,9 @@ router.delete('/:id/messages', async (req, res) => {
     const db = getDB();
     if (ObjectId.isValid(id)) {
       const comm = await db.collection('communities').findOne({ _id: new ObjectId(id) });
-      if (comm && comm.creatorEmail && userEmail && comm.creatorEmail !== userEmail) {
-        return res.status(403).json({ error: 'Only community creator can clear chat' });
+      const isMod = MODERATOR_EMAILS.includes(userEmail?.toLowerCase());
+      if (!isMod && comm && comm.creatorEmail && userEmail && comm.creatorEmail !== userEmail) {
+        return res.status(403).json({ error: 'Only community creator or moderator can clear chat' });
       }
     }
 

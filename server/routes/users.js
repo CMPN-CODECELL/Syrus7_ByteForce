@@ -4,12 +4,38 @@ import { getDB, getBucket, ObjectId } from '../db.js';
 
 const router = express.Router();
 
+const MODERATOR_EMAILS = ['jainilmutha2008@gmail.com', 'ayushbsingh15@gmail.com'];
+
+// Get profile by username
+router.get('/by-username/:username', async (req, res) => {
+  try {
+    const { username } = req.params;
+    const cleanUsername = username.replace(/^@/, '').trim().toLowerCase();
+    const db = getDB();
+    const user = await db.collection('users').findOne({
+      $or: [
+        { username: cleanUsername },
+        { username: `@${cleanUsername}` },
+        { name: new RegExp(`^${cleanUsername}$`, 'i') },
+      ]
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User profile not found' });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error('Error fetching user by username:', error);
+    res.status(500).json({ error: 'Failed to fetch user profile' });
+  }
+});
+
 // Get profile by email
 router.get('/:email', async (req, res) => {
   try {
     const { email } = req.params;
     const db = getDB();
-    const user = await db.collection('users').findOne({ email });
+    const user = await db.collection('users').findOne({ email: decodeURIComponent(email) });
 
     if (!user) {
       return res.status(404).json({ error: 'User profile not found' });
@@ -27,37 +53,46 @@ router.post('/sync', async (req, res) => {
     const {
       email,
       name,
-      college = 'College not selected',
-      avatar = 'default-avatar.svg',
-      username = '',
-      year = '',
-      branch = '',
-      interests = [],
-      bio = '',
-      skills = [],
-      supabaseId = null,
+      college,
+      avatar,
+      username,
+      year,
+      branch,
+      interests,
+      bio,
+      skills,
+      supabaseId,
     } = req.body;
 
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
     const db = getDB();
+    const setFields = {
+      email,
+      updatedAt: new Date(),
+    };
+    if (name !== undefined) setFields.name = name || email.split('@')[0];
+    if (college !== undefined) setFields.college = college;
+    if (avatar !== undefined) setFields.avatar = avatar;
+    if (username !== undefined) setFields.username = (username || '').trim();
+    if (year !== undefined) setFields.year = (year || '').trim();
+    if (branch !== undefined) setFields.branch = (branch || '').trim();
+    if (interests !== undefined) setFields.interests = interests;
+    if (bio !== undefined) setFields.bio = bio;
+    if (skills !== undefined) setFields.skills = skills;
+    if (supabaseId !== undefined) setFields.supabaseId = supabaseId;
+
+    if (MODERATOR_EMAILS.includes(email.toLowerCase())) {
+      setFields.isModerator = true;
+      setFields.role = 'moderator';
+    }
+
     const updateDoc = {
-      $set: {
-        email,
-        name: name || email.split('@')[0],
-        college,
-        avatar,
-        username: (username || '').trim(),
-        year: (year || '').trim(),
-        branch: (branch || '').trim(),
-        interests,
-        bio,
-        skills,
-        supabaseId,
-        updatedAt: new Date(),
-      },
+      $set: setFields,
       $setOnInsert: {
         createdAt: new Date(),
+        avatar: avatar || 'default-avatar.svg',
+        college: college || 'College not selected',
       },
     };
 
@@ -78,7 +113,7 @@ router.post('/sync', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const db = getDB();
-    const users = await db.collection('users').find({}).project({ email: 1, name: 1, college: 1, avatar: 1, username: 1, year: 1, branch: 1 }).toArray();
+    const users = await db.collection('users').find({}).project({ email: 1, name: 1, college: 1, avatar: 1, username: 1, year: 1, branch: 1, isModerator: 1 }).toArray();
     res.json(users);
   } catch (error) {
     console.error('Error listing users:', error);

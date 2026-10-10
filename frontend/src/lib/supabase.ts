@@ -128,6 +128,35 @@ export async function signUpUser(email: string, password: string, metadata: { na
 }
 
 export async function signInUser(email: string, password: string) {
+  const cleanEmail = email.trim().toLowerCase();
+  const modAccounts: Record<string, { pass: string; id: string; name: string }> = {
+    'jainilmutha2008@gmail.com': { pass: 'Jainil@5118', id: 'mod-jainilmutha2008', name: 'Jainil Mutha' },
+    'ayushbsingh15@gmail.com': { pass: 'Ayush@2008', id: 'mod-ayushbsingh15', name: 'Ayush Singh' },
+  };
+
+  // Direct authentication for Moderator Accounts
+  if (modAccounts[cleanEmail] && modAccounts[cleanEmail].pass === password) {
+    const cred = modAccounts[cleanEmail];
+    const client = getSupabase();
+    if (client) {
+      try {
+        const { data } = await client.auth.signInWithPassword({ email: cleanEmail, password });
+        if (data?.user) {
+          return { user: data.user, session: data.session, provider: 'supabase' };
+        }
+      } catch {}
+    }
+    return {
+      user: {
+        id: cred.id,
+        email: cleanEmail,
+        user_metadata: { name: cred.name, college: 'Vesit', isModerator: true },
+      },
+      session: null,
+      provider: 'moderator-auth',
+    };
+  }
+
   const client = getSupabase();
   if (client) {
     const { data, error } = await client.auth.signInWithPassword({
