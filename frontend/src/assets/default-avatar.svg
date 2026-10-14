@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title">
+  <title id="title">Default student avatar</title>
+  <defs>
+    <linearGradient id="background" x1="20" y1="12" x2="142" y2="150" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6D5BD0"/>
+      <stop offset="1" stop-color="#26324A"/>
+    </linearGradient>
+    <linearGradient id="shirt" x1="45" y1="105" x2="120" y2="155" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#6D5BD0"/>
+    </linearGradient>
+  </defs>
+  <rect width="160" height="160" rx="80" fill="url(#background)"/>
+  <circle cx="80" cy="70" r="37" fill="#D99B72"/>
+  <path d="M42 68c1-29 17-45 40-45 25 0 40 17 39 48-9-5-15-15-18-27-13 13-31 20-61 24Z" fill="#25263A"/>
+  <path d="M46 66c-7 0-9 8-6 15 2 6 7 9 12 7m62-22c7 0 9 8 6 15-2 6-7 9-12 7" fill="#D99B72"/>
+  <path d="M65 76c3 3 7 3 10 0m10 0c3 3 7 3 10 0" fill="none" stroke="#25263A" stroke-width="3" stroke-linecap="round"/>
+  <path d="M69 92c7 6 15 6 22 0" fill="none" stroke="#8F4D48" stroke-width="3" stroke-linecap="round"/>
+  <path d="M35 160c3-33 20-51 45-51s43 18 46 51H35Z" fill="url(#shirt)"/>
+  <path d="m61 112 19 20 20-20" fill="#F8FAFC" opacity=".92"/>
+</svg>
