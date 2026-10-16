@@ -128,7 +128,7 @@ Powered by the free **Google Gemini API**:
 - 🧹 **Self-cleaning feed:** scam or dead links are hidden until a senior approves.
 - 🍫 **Brownie rewards:** points for posts, upvotes and helpful comments.
 - ⚡ **Live real-time chats:** learn from seniors through live chats, not just threads.
-- 💸 **Built to stay free:** free Gemini API and cloud storage keep AI running without extra infrastructure cost.
+- 💸 ****Built to stay free:**** free Gemini API and cloud storage keep AI running without extra infrastructure cost.
 
 ---
 
