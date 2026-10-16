@@ -230,7 +230,7 @@ flowchart LR
 | Name | Role |
 |---|---|
 | Ayush Singh | *(add role)* |
-| *(add teammate)* | *(add role)* |
+| Devang Tayade | *(add role)* |
 
 ---
 
