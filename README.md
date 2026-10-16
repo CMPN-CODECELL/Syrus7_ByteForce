@@ -1,8 +1,9 @@
-﻿﻿<div align="center">
+<div align="center">
 
 # 🎓 Campusly
 
 ### A student-run, Reddit-style web platform built for engineering campus life.
+
 *Juniors and seniors connect to ask, share and exchange.*
 
 ![Status](https://img.shields.io/badge/status-prototype-orange?style=for-the-badge)
@@ -16,14 +17,12 @@
 ![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat-square&logo=supabase&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Google_Gemini_API-4285F4?style=flat-square&logo=google&logoColor=white)
 
-**Built for SYRUS 7.0 Hackathon · CodeCell++, CMPN, VESIT**
+**Built for SYRUS 7.0 Hackathon · CodeCell++, CMPN, VESIT**<br>
 **Domain:** Sustainability (PS-4) · **Team:** ByteForce
 
 </div>
 
 ---
-
-> 🚧 **Project status:** Campusly is currently a working prototype. Features marked ✅ are built; everything marked 🗓️ is planned. See [Project Status](#-project-status) for the full breakdown.
 
 ## 📌 Table of Contents
 
@@ -36,7 +35,6 @@
 - [Showstopper: Snap a Photo, Listing Done](#-showstopper-snap-a-photo-listing-done)
 - [Architecture & Tech Stack](#-architecture--tech-stack)
 - [Implementation Plan](#-implementation-plan)
-- [Project Status](#-project-status)
 - [Business Plan](#-business-plan)
 - [Sustainability Impact](#-sustainability-impact)
 - [Team](#-team)
@@ -50,7 +48,7 @@
 First-year engineering students feel overwhelmed by academics, tech domains and costly study materials, while seniors' tips and leftover resources sit unused or get lost in WhatsApp groups.
 
 | | Problem | What's happening |
-|---|---|---|
+|:---:|---|---|
 | ❓ | **No Safe Space to Ask** | Juniors lack a student-run space to ask doubts and get guidance without hesitation. |
 | 💬 | **Fragmented Knowledge** | Roadmaps, exam strategies and experiences stay scattered across WhatsApp groups. |
 | 📦 | **Idle Resources** | Textbooks and calculators go unused with seniors while juniors buy costly new material. |
@@ -114,11 +112,9 @@ Powered by the free **Google Gemini API**:
 
 ## ✨ Showstopper: Snap a Photo, Listing Done
 
-```
-📷 Upload a photo      →   Item photo goes to free cloud storage (Supabase Storage)
-🧠 Gemini Vision reads →   Auto-detects title, category and condition
-🗄️ Listing is created  →   Saved as a MongoDB document, zero manual typing
-```
+1. 📷 **Upload a photo:** the item photo goes to free cloud storage (Supabase Storage).
+2. 🧠 **Gemini Vision reads it:** auto-detects title, category and condition.
+3. 🗄️ **Listing is created:** saved as a MongoDB document, with zero manual typing.
 
 ### Other highlights
 
@@ -128,7 +124,7 @@ Powered by the free **Google Gemini API**:
 - 🧹 **Self-cleaning feed:** scam or dead links are hidden until a senior approves.
 - 🍫 **Brownie rewards:** points for posts, upvotes and helpful comments.
 - ⚡ **Live real-time chats:** learn from seniors through live chats, not just threads.
-- 💸 ****Built to stay free:**** free Gemini API and cloud storage keep AI running without extra infrastructure cost.
+- 💸 **Built to stay free:** free Gemini API and cloud storage keep AI running without extra infrastructure cost.
 
 ---
 
@@ -137,12 +133,12 @@ Powered by the free **Google Gemini API**:
 ```mermaid
 flowchart LR
     subgraph P[Presentation]
-        A["React.js Frontend<br/>Home feed & communities<br/>Q&A threads and listings<br/>Profiles, upvotes, bookmarks"]
+        A["React.js Frontend<br/>Home feed and communities<br/>Q&A threads and listings<br/>Profiles, upvotes, bookmarks"]
     end
     subgraph B[Application]
-        N["Node.js Backend<br/>Posts, listings, search<br/>Reports & moderation checks<br/>Calls Gemini and MongoDB Atlas"]
+        N["Node.js Backend<br/>Posts, listings, search<br/>Reports and moderation checks<br/>Calls Gemini and MongoDB Atlas"]
     end
-    subgraph D[Data & Services]
+    subgraph D[Data and Services]
         M[("MongoDB Atlas<br/>Posts, listings, profiles<br/>Vector Search, moderation flags")]
         S[("Supabase<br/>Auth - masked IDs<br/>Storage - item photos<br/>Realtime / WebSockets")]
     end
@@ -178,36 +174,11 @@ flowchart LR
 
 ---
 
-## 📍 Project Status
-
-### ✅ Built so far (working prototype)
-
-- [x] College-email sign-in, protected by Supabase Authentication
-- [x] Profile page with Brownie score
-- [x] Bitmoji avatar picker
-
-### 🗓️ Planned
-
-- [ ] Home feed
-- [ ] Module A: Technical Communities
-- [ ] Module B: Q&A and Mentorship (threads, upvotes, bookmarks)
-- [ ] Module C: Opportunity Hub
-- [ ] Module D: Academic Resource Exchange
-- [ ] Gemini Vision photo-to-listing
-- [ ] Semantic search with Atlas Vector Search
-- [ ] Thread summaries / checklists with Gemini Flash
-- [ ] Scam, dead-link and toxicity scans
-- [ ] Report thresholds, Realtime takedowns and moderator view
-- [ ] Live real-time chats
-- [ ] Pilot with first-year engineering students
-
----
-
 ## 💼 Business Plan
 
-| | |
+| Area | Details |
 |---|---|
-| **👥 Who we serve** | **First-year engineering students:** guidance, answers and affordable materials. **Seniors:** share roadmaps, exam strategies and leftover resources. **Moderators:** review flagged content from a dedicated view. |
+| **👥 Who we serve** | **First-year engineering students:** guidance, answers and affordable materials.<br>**Seniors:** share roadmaps, exam strategies and leftover resources.<br>**Moderators:** review flagged content from a dedicated view. |
 | **🎯 Value proposition** | One student-run hub instead of scattered WhatsApp groups. Anonymous or open posting lowers the barrier to ask. Buy, sell, lend or donate materials, with opportunities in one place. |
 | **⚡ Lean cost model** | Free Google Gemini API for text, vision and embeddings. Supabase for auth and storage; MongoDB Atlas for data. AI features run without extra infrastructure costs. |
 
@@ -229,8 +200,10 @@ flowchart LR
 
 | Name | Role |
 |---|---|
-| Ayush Singh | *(add role)* |
-| Devang Tayade | *(add role)* |
+| Ayush Singh | Backend & Database |
+| Jainil Mutha | Frontend |
+| Sandesh Supe | Testing |
+| Devang Tayade | PPT & Presentation |
 
 ---
 
